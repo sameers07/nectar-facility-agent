@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 from agent.prompts import SYSTEM_PROMPT
@@ -7,6 +8,8 @@ from tools.registry import TOOL_SCHEMAS, call_tool
 
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 MAX_TOOL_ITERATIONS = 8
+
+logger = logging.getLogger("investigator")
 
 CONCLUDE_TOOL_SCHEMA = {
     "type": "function",
@@ -42,6 +45,7 @@ class Investigator:
         self.client = client
 
     def investigate(self, user_message: str, session: Session) -> dict:
+        logger.info("USER: %s", user_message)
         session.conversation.append({"role": "user", "content": user_message})
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + session.conversation
         tools = TOOL_SCHEMAS + [CONCLUDE_TOOL_SCHEMA]
@@ -63,11 +67,16 @@ class Investigator:
                 args = json.loads(tool_call.function.arguments)
 
                 if name == "submit_conclusion":
+                    logger.info(
+                        "REASONING: %s (confidence %.2f)", args["conclusion"], args["confidence"]
+                    )
                     session.investigation = args
                     session.conversation.append({"role": "assistant", "content": args["conclusion"]})
                     return args
 
+                logger.info("TOOL -> %s(%s)", name, args)
                 result = call_tool(name, args)
+                logger.info("TOOL <- %s", result)
                 evidence_log.append({"tool": name, "arguments": args, "result": result})
                 messages.append(
                     {

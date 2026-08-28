@@ -4,11 +4,14 @@ Text mode (default):   python app.py
 Voice mode (mic/speaker, local Whisper STT + local TTS): python app.py --voice
 """
 import argparse
+import logging
 import os
 import sys
 
 from agent.investigator import Investigator
 from agent.state import Session
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
 def get_user_message(voice: bool) -> str:
