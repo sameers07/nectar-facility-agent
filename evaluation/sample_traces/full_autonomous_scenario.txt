@@ -1,0 +1,57 @@
+Scenario D — full autonomous investigation + confirmed action
+Query: "The office on the second floor of Building A feels very hot. Can you investigate and let me know if we need maintenance?"
+
+Facility investigator ready. Ask about a building or HVAC asset (Ctrl+C to quit).
+
+You: ROUTE: {'complexity': 'high', 'action_required': False, 'sources': ['live_data'], 'confidence': 1, 'intent': 'diagnosis'} (latency_ms=3709, tokens=928)
+Delegating to Investigator with model=gemini-2.5-pro, rag=False, action=False
+USER: The office on the second floor of Building A feels very hot. Can you investigate and let me know if we need maintenance?
+TOOL -> get_sensor_data({'target': 'Building A'})
+TOOL <- {'target': 'Building A', 'readings': {'temperature': 28.4}}
+TOOL -> get_active_alerts({'building': 'Building A'})
+TOOL <- {'building': 'Building A', 'alerts': [{'asset': 'AHU-02', 'building': 'Building A', 'type': 'LOW_AIRFLOW', 'severity': 'high'}]}
+TOOL -> get_asset_relationships({'building': 'Building A'})
+TOOL <- {'building': 'Building A', 'assets': ['Chiller-01', 'AHU-01', 'AHU-02'], 'relationships': [{'chiller': 'Chiller-01', 'serves': ['AHU-01', 'AHU-02']}]}
+TOOL -> get_asset_status({'asset_id': 'AHU-02'})
+TOOL <- {'asset': 'AHU-02', 'type': 'ahu', 'building': 'Building A', 'floor': 2, 'status': 'warning', 'airflow': 41}
+TOOL -> get_sensor_data({'target': 'AHU-02'})
+TOOL <- {'target': 'AHU-02', 'readings': {'status': 'warning', 'airflow': 41}}
+TOOL -> get_asset_details({'asset_id': 'AHU-02'})
+TOOL <- {'asset_id': 'AHU-02', 'type': 'ahu', 'building': 'Building A', 'floor': 2}
+REASONING: The office on the second floor of Building A is hot because air handling unit AHU-02, which serves that floor, is operating with low airflow. There is a high-severity alert for this issue, so maintenance is likely needed. (confidence 1.00)
+
+Agent: The office on the second floor of Building A is hot because air handling unit AHU-02, which serves that floor, is operating with low airflow. There is a high-severity alert for this issue, so maintenance is likely needed.
+Confidence: 100%
+Evidence:
+  - Building A temperature is 28.4 degrees.
+  - There is an active "LOW_AIRFLOW" alert for asset AHU-02.
+  - AHU-02, which is on the second floor of Building A, has a "warning" status and its airflow is at 41 (well below normal).
+
+--- separate run, same opening question + "create a maintenance request if necessary" + confirmation ---
+
+Query: "Building A is too hot. Find the likely cause and create a maintenance request if necessary." -> "Yes."
+
+You: ROUTE: {'confidence': 1, 'intent': 'diagnosis', 'sources': ['live_data', 'rag', 'action'], 'action_required': True, 'complexity': 'high'} (latency_ms=3476, tokens=991)
+Delegating to Investigator with model=gemini-2.5-pro, rag=True, action=True
+USER: Building A is too hot. Find the likely cause and create a maintenance request if necessary.
+TOOL -> get_sensor_data({'target': 'Building A'})
+TOOL <- {'target': 'Building A', 'readings': {'temperature': 28.4}}
+TOOL -> get_asset_relationships({'building': 'Building A'})
+TOOL <- {'building': 'Building A', 'assets': ['Chiller-01', 'AHU-01', 'AHU-02'], 'relationships': [{'chiller': 'Chiller-01', 'serves': ['AHU-01', 'AHU-02']}]}
+TOOL -> get_asset_status({'asset_id': 'Chiller-01'})
+TOOL <- {'asset': 'Chiller-01', 'type': 'chiller', 'building': 'Building A', 'floor': 0, 'status': 'running', 'power_deviation': 18}
+TOOL -> get_asset_status({'asset_id': 'AHU-01'})
+TOOL <- {'asset': 'AHU-01', 'type': 'ahu', 'building': 'Building A', 'floor': 1, 'status': 'normal', 'airflow': 72}
+TOOL -> get_asset_status({'asset_id': 'AHU-02'})
+TOOL <- {'asset': 'AHU-02', 'type': 'ahu', 'building': 'Building A', 'floor': 2, 'status': 'warning', 'airflow': 41}
+PROPOSED ACTION: {'action': 'create_service_request', 'asset_id': 'AHU-02', 'priority': 'medium', 'description': 'AHU-02 is reporting low airflow (41), and the building temperature is high (28.4C). Chiller-01, which serves this AHU, is also showing a high power deviation.', 'confidence': 0.8, 'evidence': ['Building A temperature is 28.4C.', "AHU-02 status is 'warning' and airflow is 41.", 'Chiller-01, which serves AHU-02, has a power deviation of 18%.'], 'confirmation_prompt': "I've found that AHU-02 has low airflow, which is likely making Building A too hot. I can create a maintenance request to have this investigated. Shall I proceed?", 'issue': 'Low airflow'}
+
+Agent: I've found that AHU-02 has low airflow, which is likely making Building A too hot. I can create a maintenance request to have this investigated. Shall I proceed?
+Confidence: 80%
+Evidence:
+  - Building A temperature is 28.4C.
+  - AHU-02 status is 'warning' and airflow is 41.
+  - Chiller-01, which serves AHU-02, has a power deviation of 18%.
+
+You: [Yes.]
+Agent: Done -- created service request SR-1001 for AHU-02.
