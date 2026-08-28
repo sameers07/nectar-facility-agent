@@ -1,5 +1,6 @@
 import logging
 
+from agent.errors import LLMProviderError, RoutingError
 from agent.investigator import Investigator
 from agent.router import CAPABILITIES, CONFIDENCE_THRESHOLD, FAST_MODEL, STRONG_MODEL, Router
 from agent.state import Session
@@ -26,7 +27,12 @@ class Orchestrator:
         self.investigator_factory = investigator_factory or (lambda model: Investigator(model=model))
 
     def handle(self, user_message: str, session: Session) -> dict:
-        contract = self.router.route(user_message, session)
+        try:
+            contract = self.router.route(user_message, session)
+        except LLMProviderError:
+            return _say(session, user_message, "I'm having trouble processing your request right now. Please try again.")
+        except RoutingError:
+            return _say(session, user_message, "Your request couldn't be safely classified. Could you rephrase it?")
 
         if contract["confidence"] < CONFIDENCE_THRESHOLD:
             return _say(session, user_message, "Could you clarify what you'd like me to look into?")

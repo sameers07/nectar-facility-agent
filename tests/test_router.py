@@ -1,3 +1,6 @@
+import pytest
+
+from agent.errors import LLMProviderError, RoutingError
 from agent.router import Router
 from agent.state import Session
 from tests.support import RaisingClient, ScriptedClient, llm_response, tool_call
@@ -45,10 +48,25 @@ def test_route_sees_prior_conversation():
     assert "What about the chiller?" in contents
 
 
-def test_route_failure_falls_back_to_low_confidence_instead_of_crashing():
+def test_api_failure_raises_llm_provider_error():
     router = Router(client=RaisingClient())
 
-    result = router.route("What is an AHU?", Session())
+    with pytest.raises(LLMProviderError):
+        router.route("What is an AHU?", Session())
 
-    assert result["confidence"] == 0.0
-    assert result["sources"] == []
+
+def test_missing_contract_fields_raise_routing_error():
+    incomplete = {"intent": "knowledge_question", "sources": ["rag"]}  # missing confidence etc.
+    client = ScriptedClient([_route_response(incomplete)])
+    router = Router(client=client)
+
+    with pytest.raises(RoutingError):
+        router.route("What is an AHU?", Session())
+
+
+def test_no_tool_call_raises_routing_error():
+    client = ScriptedClient([llm_response(tool_calls=None, content="I'm not sure.")])
+    router = Router(client=client)
+
+    with pytest.raises(RoutingError):
+        router.route("What is an AHU?", Session())

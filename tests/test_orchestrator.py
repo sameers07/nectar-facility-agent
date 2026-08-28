@@ -1,3 +1,4 @@
+from agent.errors import LLMProviderError, RoutingError
 from agent.investigator import Investigator
 from agent.orchestrator import Orchestrator
 from agent.router import FAST_MODEL, STRONG_MODEL
@@ -11,6 +12,14 @@ class FixedRouter:
 
     def route(self, user_message, session):
         return self.contract
+
+
+class RaisingRouter:
+    def __init__(self, error):
+        self.error = error
+
+    def route(self, user_message, session):
+        raise self.error
 
 
 def test_knowledge_question_routes_to_rag_placeholder():
@@ -120,6 +129,20 @@ def test_low_confidence_asks_for_clarification():
     result = orchestrator.handle("Something seems wrong.", Session())
 
     assert "clarify" in result["conclusion"].lower()
+
+
+def test_llm_provider_error_gives_try_again_message():
+    orchestrator = Orchestrator(router=RaisingRouter(LLMProviderError("boom")))
+    result = orchestrator.handle("What is an AHU?", Session())
+
+    assert "try again" in result["conclusion"].lower()
+
+
+def test_routing_error_gives_rephrase_message():
+    orchestrator = Orchestrator(router=RaisingRouter(RoutingError("bad contract")))
+    result = orchestrator.handle("What is an AHU?", Session())
+
+    assert "rephrase" in result["conclusion"].lower()
 
 
 def test_unavailable_capability_declines_instead_of_hallucinating():
