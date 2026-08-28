@@ -8,34 +8,13 @@ import logging
 import os
 import sys
 
-from agent.investigator import Investigator
-from agent.state import Session
+from dotenv import load_dotenv
 
+from agent.voice_agent import VoiceAgent
+
+sys.stdout.reconfigure(line_buffering=True)
+load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-
-
-def get_user_message(voice: bool) -> str:
-    if voice:
-        from voice.stt import record_and_transcribe
-
-        text = record_and_transcribe()
-        print(f"You: {text}")
-        return text.strip()
-    return input("\nYou: ").strip()
-
-
-def respond(result: dict, voice: bool) -> None:
-    print(f"\nAgent: {result['conclusion']}")
-    if result.get("confidence") is not None:
-        print(f"Confidence: {result['confidence']:.0%}")
-    if result.get("evidence"):
-        print("Evidence:")
-        for fact in result["evidence"]:
-            print(f"  - {fact}")
-    if voice:
-        from voice.tts import speak
-
-        speak(result["conclusion"])
 
 
 def main():
@@ -43,24 +22,11 @@ def main():
     parser.add_argument("--voice", action="store_true", help="Use microphone input and spoken output.")
     args = parser.parse_args()
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY is not set. Copy .env.example to .env and fill it in.")
+    if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        print("GEMINI_API_KEY is not set. Copy .env.example to .env and fill it in.")
         sys.exit(1)
 
-    investigator = Investigator()
-    session = Session()
-    print("Facility investigator ready. Ask about a building or HVAC asset (Ctrl+C to quit).")
-
-    while True:
-        try:
-            user_message = get_user_message(args.voice)
-        except (KeyboardInterrupt, EOFError):
-            break
-        if not user_message:
-            continue
-
-        result = investigator.investigate(user_message, session)
-        respond(result, args.voice)
+    VoiceAgent(voice=args.voice).run()
 
 
 if __name__ == "__main__":
