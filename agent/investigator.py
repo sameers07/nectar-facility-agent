@@ -50,9 +50,17 @@ class Investigator:
         evidence_log = []
 
         for _ in range(MAX_TOOL_ITERATIONS):
-            response = self.client.chat.completions.create(
-                model=self.model, messages=messages, tools=tools, tool_choice="auto"
-            )
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model, messages=messages, tools=tools, tool_choice="auto"
+                )
+            except Exception:
+                logger.exception("LLM call failed during investigation")
+                return {
+                    "conclusion": "I ran into a technical error while investigating. Please try again.",
+                    "confidence": 0.0,
+                    "evidence": [e["result"] for e in evidence_log],
+                }
             message = response.choices[0].message
             messages.append(message)
 

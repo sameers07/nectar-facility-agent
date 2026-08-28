@@ -75,3 +75,18 @@ def test_step_skips_empty_input(monkeypatch):
 
     assert keep_going is True
     assert agent.session.conversation == []
+
+
+class ExplodingOrchestrator:
+    def handle(self, user_message, session):
+        raise RuntimeError("simulated unexpected failure")
+
+
+def test_step_survives_an_unexpected_orchestrator_error(monkeypatch, capsys):
+    agent = VoiceAgent(voice=False, orchestrator=ExplodingOrchestrator())
+
+    monkeypatch.setattr("builtins.input", lambda prompt="": "What is the temperature in Building A?")
+    keep_going = agent.step()
+
+    assert keep_going is True
+    assert "went wrong" in capsys.readouterr().out

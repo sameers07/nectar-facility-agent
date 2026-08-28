@@ -1,5 +1,9 @@
+import logging
+
 from agent.orchestrator import Orchestrator
 from agent.state import Session
+
+logger = logging.getLogger("voice_agent")
 
 
 class VoiceAgent:
@@ -43,7 +47,11 @@ class VoiceAgent:
         if not user_message:
             return True
 
-        result = self.orchestrator.handle(user_message, self.session)
+        try:
+            result = self.orchestrator.handle(user_message, self.session)
+        except Exception:
+            logger.exception("Unhandled error processing request")
+            result = {"conclusion": "Something went wrong on my end. Could you try that again?", "confidence": None}
         self.respond(result)
         return True
 

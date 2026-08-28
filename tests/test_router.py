@@ -1,6 +1,6 @@
 from agent.router import Router
 from agent.state import Session
-from tests.support import ScriptedClient, llm_response, tool_call
+from tests.support import RaisingClient, ScriptedClient, llm_response, tool_call
 
 
 def _route_response(contract):
@@ -43,3 +43,12 @@ def test_route_sees_prior_conversation():
     contents = [m["content"] for m in sent_messages if isinstance(m, dict)]
     assert "Why is Building A hot?" in contents
     assert "What about the chiller?" in contents
+
+
+def test_route_failure_falls_back_to_low_confidence_instead_of_crashing():
+    router = Router(client=RaisingClient())
+
+    result = router.route("What is an AHU?", Session())
+
+    assert result["confidence"] == 0.0
+    assert result["sources"] == []

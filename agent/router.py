@@ -91,13 +91,26 @@ class Router:
             + session.conversation
             + [{"role": "user", "content": user_message}]
         )
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=[ROUTE_SCHEMA],
-            tool_choice={"type": "function", "function": {"name": "route"}},
-        )
-        tool_call = response.choices[0].message.tool_calls[0]
-        contract = json.loads(tool_call.function.arguments)
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=[ROUTE_SCHEMA],
+                tool_choice={"type": "function", "function": {"name": "route"}},
+            )
+            tool_call = response.choices[0].message.tool_calls[0]
+            contract = json.loads(tool_call.function.arguments)
+        except Exception:
+            # A failed/malformed routing call shouldn't crash the app -- a
+            # confidence of 0 naturally routes into Orchestrator's existing
+            # low-confidence clarification path.
+            logger.exception("Routing call failed, falling back to clarification")
+            contract = {
+                "intent": "unknown",
+                "sources": [],
+                "action_required": False,
+                "complexity": "low",
+                "confidence": 0.0,
+            }
         logger.info("ROUTE: %s", contract)
         return contract
