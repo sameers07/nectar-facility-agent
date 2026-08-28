@@ -1,42 +1,38 @@
-import json
-from types import SimpleNamespace
-
 from agent.investigator import Investigator
 from agent.state import Session
+from tests.support import ScriptedClient, llm_response, tool_call
 
 
-def _tool_call(call_id, name, arguments):
-    return SimpleNamespace(
-        id=call_id,
-        function=SimpleNamespace(name=name, arguments=json.dumps(arguments)),
-    )
+def test_basic_single_tool_query():
+    responses = [
+        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "2",
+                    "submit_conclusion",
+                    {"conclusion": "Building A is at 28.4C.", "confidence": 1.0, "evidence": ["28.4C"]},
+                )
+            ]
+        ),
+    ]
+    investigator = Investigator(client=ScriptedClient(responses))
+    session = Session()
 
+    result = investigator.investigate("What is the temperature in Building A?", session)
 
-def _response(tool_calls=None, content=None):
-    message = SimpleNamespace(tool_calls=tool_calls, content=content)
-    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
-
-
-class ScriptedClient:
-    """Fake OpenAI client that replays a fixed sequence of responses."""
-
-    def __init__(self, responses):
-        self._responses = iter(responses)
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
-
-    def _create(self, **kwargs):
-        return next(self._responses)
+    assert "28.4" in result["conclusion"]
 
 
 def test_multi_step_investigation_reaches_conclusion():
     responses = [
-        _response(tool_calls=[_tool_call("1", "get_building_temperature", {"building": "Building A"})]),
-        _response(tool_calls=[_tool_call("2", "get_hvac_assets", {"building": "Building A"})]),
-        _response(tool_calls=[_tool_call("3", "get_asset_status", {"asset": "AHU-02"})]),
-        _response(tool_calls=[_tool_call("4", "get_active_alerts", {"building": "Building A"})]),
-        _response(
+        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("2", "get_hvac_assets", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("3", "get_asset_status", {"asset": "AHU-02"})]),
+        llm_response(tool_calls=[tool_call("4", "get_active_alerts", {"building": "Building A"})]),
+        llm_response(
             tool_calls=[
-                _tool_call(
+                tool_call(
                     "5",
                     "submit_conclusion",
                     {
@@ -58,11 +54,83 @@ def test_multi_step_investigation_reaches_conclusion():
     assert session.investigation == result
 
 
+def test_investigates_a_specific_asset_when_named():
+    responses = [
+        llm_response(tool_calls=[tool_call("1", "get_asset_status", {"asset": "AHU-02"})]),
+        llm_response(tool_calls=[tool_call("2", "get_active_alerts", {"building": "Building A"})]),
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "3",
+                    "submit_conclusion",
+                    {
+                        "conclusion": "AHU-02 is in a warning state with low airflow.",
+                        "confidence": 0.85,
+                        "evidence": ["AHU-02 airflow is 41%", "AHU-02 has an active LOW_AIRFLOW alert"],
+                    },
+                )
+            ]
+        ),
+    ]
+    client = ScriptedClient(responses)
+    investigator = Investigator(client=client)
+    session = Session()
+
+    result = investigator.investigate("Can you check AHU-02?", session)
+
+    called_tools = [c.function.name for r in responses[:2] for c in r.choices[0].message.tool_calls]
+    assert called_tools == ["get_asset_status", "get_active_alerts"]
+    assert "AHU-02" in result["conclusion"]
+
+
+def test_follow_up_question_carries_prior_conversation():
+    first_turn = [
+        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "2",
+                    "submit_conclusion",
+                    {"conclusion": "Building A is at 28.4C, above normal.", "confidence": 0.7, "evidence": []},
+                )
+            ]
+        ),
+    ]
+    second_turn = [
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "3",
+                    "submit_conclusion",
+                    {
+                        "conclusion": "Chiller-01 is running with an 18% power deviation.",
+                        "confidence": 0.6,
+                        "evidence": [],
+                    },
+                )
+            ]
+        )
+    ]
+    client = ScriptedClient(first_turn + second_turn)
+    investigator = Investigator(client=client)
+    session = Session()
+
+    investigator.investigate("Why is Building A hot?", session)
+    investigator.investigate("What about the chiller?", session)
+
+    # the second LLM call must have received the full prior conversation,
+    # not just the new question in isolation
+    second_call_messages = client.calls[-1]["messages"]
+    roles_and_content = [(m["role"], m.get("content")) for m in second_call_messages if isinstance(m, dict)]
+    assert ("user", "Why is Building A hot?") in roles_and_content
+    assert ("user", "What about the chiller?") in roles_and_content
+
+
 def test_insufficient_data_does_not_hallucinate():
     responses = [
-        _response(
+        llm_response(
             tool_calls=[
-                _tool_call(
+                tool_call(
                     "1",
                     "submit_conclusion",
                     {
@@ -85,7 +153,7 @@ def test_insufficient_data_does_not_hallucinate():
 
 def test_iteration_limit_returns_fallback():
     responses = [
-        _response(tool_calls=[_tool_call(str(i), "get_building_temperature", {"building": "Building A"})])
+        llm_response(tool_calls=[tool_call(str(i), "get_building_temperature", {"building": "Building A"})])
         for i in range(20)
     ]
     investigator = Investigator(client=ScriptedClient(responses))

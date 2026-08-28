@@ -50,3 +50,16 @@ uv run app.py --voice    # microphone in, spoken response out
 ```bash
 uv run pytest
 ```
+
+## Evaluation
+
+`uv run python -m scripts.eval_scenarios` runs the 5 review scenarios (basic
+query, autonomous multi-tool investigation, asset-specific investigation,
+follow-up context, unknown information) against a scripted LLM and prints a
+pass/fail table. This proves the loop's mechanics — tool dispatch, evidence
+handling, session memory — deterministically, without needing an API key.
+
+It does not by itself prove the model autonomously *chooses* its own tool
+sequence; that requires a real LLM. To see that, set `OPENAI_API_KEY` and run
+`uv run app.py` — it logs every `TOOL ->` / `TOOL <-` / `REASONING` step so
+you can watch the investigation unfold live.
