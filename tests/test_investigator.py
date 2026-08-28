@@ -1,11 +1,11 @@
 from agent.investigator import Investigator
 from agent.state import Session
-from tests.support import RaisingClient, ScriptedClient, llm_response, tool_call
+from tests.support import RaisingClient, ScriptedClient, fake_tool_dispatch, llm_response, tool_call
 
 
 def test_basic_single_tool_query():
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
         llm_response(
             tool_calls=[
                 tool_call(
@@ -16,7 +16,7 @@ def test_basic_single_tool_query():
             ]
         ),
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     session = Session()
 
     result = investigator.investigate("What is the temperature in Building A?", session)
@@ -26,9 +26,9 @@ def test_basic_single_tool_query():
 
 def test_multi_step_investigation_reaches_conclusion():
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
-        llm_response(tool_calls=[tool_call("2", "get_hvac_assets", {"building": "Building A"})]),
-        llm_response(tool_calls=[tool_call("3", "get_asset_status", {"asset": "AHU-02"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
+        llm_response(tool_calls=[tool_call("2", "get_asset_relationships", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("3", "get_asset_status", {"asset_id": "AHU-02"})]),
         llm_response(tool_calls=[tool_call("4", "get_active_alerts", {"building": "Building A"})]),
         llm_response(
             tool_calls=[
@@ -44,7 +44,7 @@ def test_multi_step_investigation_reaches_conclusion():
             ]
         ),
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     session = Session()
 
     result = investigator.investigate("The temperature in Building A is too high.", session)
@@ -56,7 +56,7 @@ def test_multi_step_investigation_reaches_conclusion():
 
 def test_investigates_a_specific_asset_when_named():
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_asset_status", {"asset": "AHU-02"})]),
+        llm_response(tool_calls=[tool_call("1", "get_asset_status", {"asset_id": "AHU-02"})]),
         llm_response(tool_calls=[tool_call("2", "get_active_alerts", {"building": "Building A"})]),
         llm_response(
             tool_calls=[
@@ -73,7 +73,7 @@ def test_investigates_a_specific_asset_when_named():
         ),
     ]
     client = ScriptedClient(responses)
-    investigator = Investigator(client=client)
+    investigator = Investigator(client=client, tool_dispatch=fake_tool_dispatch)
     session = Session()
 
     result = investigator.investigate("Can you check AHU-02?", session)
@@ -85,7 +85,7 @@ def test_investigates_a_specific_asset_when_named():
 
 def test_follow_up_question_carries_prior_conversation():
     first_turn = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
         llm_response(
             tool_calls=[
                 tool_call(
@@ -112,7 +112,7 @@ def test_follow_up_question_carries_prior_conversation():
         )
     ]
     client = ScriptedClient(first_turn + second_turn)
-    investigator = Investigator(client=client)
+    investigator = Investigator(client=client, tool_dispatch=fake_tool_dispatch)
     session = Session()
 
     investigator.investigate("Why is Building A hot?", session)
@@ -142,7 +142,7 @@ def test_insufficient_data_does_not_hallucinate():
             ]
         )
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     session = Session()
 
     result = investigator.investigate("Why is Building A experiencing unusual vibration?", session)
@@ -153,10 +153,10 @@ def test_insufficient_data_does_not_hallucinate():
 
 def test_iteration_limit_returns_fallback():
     responses = [
-        llm_response(tool_calls=[tool_call(str(i), "get_building_temperature", {"building": "Building A"})])
+        llm_response(tool_calls=[tool_call(str(i), "get_sensor_data", {"target": "Building A"})])
         for i in range(20)
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     session = Session()
 
     result = investigator.investigate("Why is Building A hot?", session)
@@ -166,7 +166,7 @@ def test_iteration_limit_returns_fallback():
 
 
 def test_llm_failure_degrades_gracefully_instead_of_crashing():
-    investigator = Investigator(client=RaisingClient())
+    investigator = Investigator(client=RaisingClient(), tool_dispatch=fake_tool_dispatch)
     session = Session()
 
     result = investigator.investigate("What is the temperature in Building A?", session)

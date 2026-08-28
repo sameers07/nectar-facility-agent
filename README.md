@@ -104,6 +104,61 @@ prompt instruction, not new machinery.
   constructor params (defaulting to none) so `Orchestrator` can attach the
   RAG tool for a given request without changing Task 1's default behavior.
 
+### Task 4 — MCP tool layer + safety-gated actions
+
+Facility reads now go through a real MCP server over stdio, not a direct
+function call — `tools/facility_tools.py` still exists, but only the MCP
+server calls it; the Investigator only ever talks to the facility through
+the MCP protocol.
+
+- `mcp_server/server.py` — an `MCPServer` (official `mcp` SDK) exposing
+  Nectar's 8 required tools: `get_asset_details`, `get_asset_status`,
+  `get_sensor_data`, `get_energy_consumption`, `get_active_alerts`,
+  `get_asset_relationships`, `create_service_request`,
+  `update_service_request`. The six reads are thin wrappers over
+  `tools/facility_tools.py`; `mcp_server/service_requests.py` holds the
+  in-memory write state (`SR-1001`, `SR-1002`, ...) for the two writes.
+- `mcp_client/client.py` — a synchronous wrapper around the SDK's
+  async client. A background thread owns one persistent event loop and
+  one long-lived coroutine holding the `stdio_client`/`ClientSession`
+  context managers open for the connection's lifetime (anyio's cancel
+  scopes require entering/exiting a task group in the same task, so a
+  fresh coroutine per call doesn't work); `list_tools()`/`call_tool()`
+  block on `run_coroutine_threadsafe` against that loop. Tested against a
+  real subprocess in `tests/test_mcp_integration.py`, deliberately not
+  mocked — that's exactly the boundary Task 4 requires to be a genuine
+  protocol, not a decorative wrapper.
+- `tools/mcp_tools.py` — `MCP_TOOL_SCHEMAS` + `call_mcp_tool`, the
+  Investigator's new *default* facility tool source (previously
+  `tools/registry.py`, which still exists but is no longer the default).
+  A connection failure returns `{"error": ...}` rather than raising, so it
+  degrades the same way any other tool error does.
+- `agent/action_gate.py` — the safety gate. The Investigator can only
+  *propose* a write via `propose_action` (a terminal tool alongside
+  `submit_conclusion`, handled the same way in `agent/investigator.py`);
+  this never executes anything, it just asks the user to confirm.
+  `classify_confirmation()` is deliberately regex-based, not an LLM call —
+  a gate on a write action needs predictable yes/no/neither, not a
+  best-effort classification.
+- `agent/orchestrator.py` — checks `session.pending_action` *before*
+  routing. A clear "yes" executes the MCP write using the details already
+  stored at proposal time (never re-derived from the LLM, so they can't
+  drift); "no" cancels with no write; anything else drops the stale
+  proposal and routes the message as a normal new request, so an old
+  proposal can't be accidentally confirmed by an unrelated later "yes".
+- `agent/state.py`'s `Session` gained `pending_action`.
+
+Live-verified end-to-end against Nectar's own example ("The temperature in
+Building A is high. Find the likely cause and create a maintenance
+request if necessary."): 5 autonomous MCP tool calls with no hardcoded
+sequence, correct causal reasoning via `get_asset_relationships`
+("Chiller-01 serves AHU-02"), a proposal instead of direct execution, and
+the write only firing after an explicit "yes" — returning a real
+`SR-1001` from the real MCP server. Also verified live: rejecting the
+proposal (no write happens) and a blind "create the request" with no
+prior diagnosis (caught by the router's own confidence gate before it
+even reaches the investigator).
+
 ## Setup
 
 ```bash
@@ -136,6 +191,10 @@ better accuracy at the cost of a slower, larger model download.
 ```bash
 uv run pytest
 ```
+
+`tests/test_mcp_integration.py` spawns a real MCP server subprocess (~0.7s
+overhead) rather than mocking the protocol — everything else uses fast
+in-process fakes.
 
 ## Evaluation
 

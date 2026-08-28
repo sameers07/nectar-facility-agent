@@ -3,7 +3,7 @@ from agent.investigator import Investigator
 from agent.orchestrator import Orchestrator
 from agent.router import FAST_MODEL, STRONG_MODEL
 from agent.state import Session
-from tests.support import ScriptedClient, llm_response, tool_call
+from tests.support import ScriptedClient, fake_tool_dispatch, llm_response, tool_call
 
 
 class FixedRouter:
@@ -65,7 +65,7 @@ def test_live_status_delegates_to_investigator_with_fast_model():
         "confidence": 0.99,
     }
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
         llm_response(
             tool_calls=[
                 tool_call(
@@ -80,7 +80,7 @@ def test_live_status_delegates_to_investigator_with_fast_model():
 
     def investigator_factory(model, extra_schemas=None, extra_dispatch=None):
         used_models.append(model)
-        return Investigator(client=ScriptedClient(responses))
+        return Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
 
     orchestrator = Orchestrator(router=FixedRouter(contract), investigator_factory=investigator_factory)
     result = orchestrator.handle("What is Chiller-01's current temperature?", Session())
@@ -124,7 +124,31 @@ def test_diagnosis_delegates_to_investigator_with_strong_model():
     assert captured["schemas"][0]["function"]["name"] == "retrieve_facility_docs"
 
 
-def test_action_request_routes_to_action_placeholder():
+def _propose_action_investigator_factory(action=None):
+    action = action or {
+        "action": "create_service_request",
+        "asset_id": "AHU-02",
+        "issue": "Low airflow",
+        "priority": "high",
+        "description": "AHU-02 has an active low-airflow alert.",
+        "confirmation_prompt": "I found a likely AHU-02 airflow issue. Would you like me to create a maintenance request?",
+        "confidence": 0.9,
+        "evidence": ["AHU-02 airflow is 41%"],
+    }
+    responses = [llm_response(tool_calls=[tool_call("1", "propose_action", action)])]
+
+    def factory(model, extra_schemas=None, extra_dispatch=None):
+        return Investigator(
+            client=ScriptedClient(responses),
+            tool_dispatch=fake_tool_dispatch,
+            extra_tool_schemas=extra_schemas,
+            extra_tool_dispatch=extra_dispatch,
+        )
+
+    return factory
+
+
+def test_action_request_proposes_action_and_awaits_confirmation():
     contract = {
         "intent": "action_request",
         "sources": ["live_data", "action"],
@@ -132,10 +156,90 @@ def test_action_request_routes_to_action_placeholder():
         "complexity": "low",
         "confidence": 0.95,
     }
-    orchestrator = Orchestrator(router=FixedRouter(contract))
-    result = orchestrator.handle("Create a maintenance request for AHU-02.", Session())
+    orchestrator = Orchestrator(router=FixedRouter(contract), investigator_factory=_propose_action_investigator_factory())
+    session = Session()
 
-    assert "live systems" in result["conclusion"]
+    result = orchestrator.handle("Create a maintenance request for AHU-02.", session)
+
+    assert "maintenance request" in result["conclusion"].lower()
+    assert session.pending_action is not None
+    assert session.pending_action["asset_id"] == "AHU-02"
+
+
+def test_confirming_pending_action_executes_the_mcp_write():
+    orchestrator = Orchestrator(router=RaisingRouter(AssertionError("router should not be called")))
+    session = Session()
+    session.pending_action = {
+        "action": "create_service_request",
+        "asset_id": "AHU-02",
+        "issue": "Low airflow",
+        "priority": "high",
+        "description": "AHU-02 has an active low-airflow alert.",
+    }
+
+    result = orchestrator.handle("Yes, go ahead.", session)
+
+    assert session.pending_action is None
+    assert "SR-" in result["conclusion"]
+
+
+def test_rejecting_pending_action_does_not_write():
+    orchestrator = Orchestrator(router=RaisingRouter(AssertionError("router should not be called")))
+    session = Session()
+    session.pending_action = {
+        "action": "create_service_request",
+        "asset_id": "AHU-02",
+        "issue": "Low airflow",
+        "priority": "high",
+        "description": "test",
+    }
+
+    result = orchestrator.handle("No, don't do that.", session)
+
+    assert session.pending_action is None
+    assert "won't create" in result["conclusion"].lower()
+
+
+def test_unrelated_reply_drops_stale_pending_action_and_routes_normally():
+    contract = {
+        "intent": "knowledge_question",
+        "sources": ["rag"],
+        "action_required": False,
+        "complexity": "low",
+        "confidence": 0.98,
+    }
+    responses = [
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "1", "submit_conclusion", {"conclusion": "An AHU circulates air.", "confidence": 0.9, "evidence": []}
+                )
+            ]
+        )
+    ]
+
+    def investigator_factory(model, extra_schemas=None, extra_dispatch=None):
+        return Investigator(
+            client=ScriptedClient(responses),
+            tool_dispatch=fake_tool_dispatch,
+            extra_tool_schemas=extra_schemas,
+            extra_tool_dispatch=extra_dispatch,
+        )
+
+    orchestrator = Orchestrator(router=FixedRouter(contract), investigator_factory=investigator_factory)
+    session = Session()
+    session.pending_action = {
+        "action": "create_service_request",
+        "asset_id": "AHU-02",
+        "issue": "x",
+        "priority": "high",
+        "description": "x",
+    }
+
+    result = orchestrator.handle("What is an AHU?", session)
+
+    assert session.pending_action is None
+    assert "AHU" in result["conclusion"]
 
 
 def test_low_confidence_asks_for_clarification():
@@ -168,16 +272,16 @@ def test_routing_error_gives_rephrase_message():
 
 def test_unavailable_capability_declines_instead_of_hallucinating():
     contract = {
-        "intent": "energy_usage",
-        "sources": ["energy"],
+        "intent": "unknown",
+        "sources": ["video_surveillance"],
         "action_required": False,
         "complexity": "low",
         "confidence": 0.9,
     }
     orchestrator = Orchestrator(router=FixedRouter(contract))
-    result = orchestrator.handle("What's the current energy consumption?", Session())
+    result = orchestrator.handle("Can you show me the camera feed for the loading dock?", Session())
 
-    assert "energy" in result["conclusion"]
+    assert "video_surveillance" in result["conclusion"]
     assert "can't access" in result["conclusion"]
 
 

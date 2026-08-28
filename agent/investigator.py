@@ -5,7 +5,7 @@ import os
 from agent.llm_client import build_client
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import Session
-from tools.registry import TOOL_SCHEMAS, call_tool
+from tools.mcp_tools import MCP_TOOL_SCHEMAS, call_mcp_tool
 
 MODEL = os.environ.get("GEMINI_MODEL", os.environ.get("OPENAI_MODEL", "gemini-2.5-flash"))
 MAX_TOOL_ITERATIONS = 8
@@ -38,10 +38,22 @@ CONCLUDE_TOOL_SCHEMA = {
 
 
 class Investigator:
-    def __init__(self, client=None, model: str = None, extra_tool_schemas: list = None, extra_tool_dispatch: dict = None):
+    def __init__(
+        self,
+        client=None,
+        model: str = None,
+        tool_schemas: list = None,
+        tool_dispatch=None,
+        extra_tool_schemas: list = None,
+        extra_tool_dispatch: dict = None,
+    ):
         self.client = client or build_client()
         self.model = model or MODEL
-        self.tool_schemas = TOOL_SCHEMAS + (extra_tool_schemas or [])
+        # base facility tools: real MCP by default. Tests inject a fast fake
+        # here so the loop-mechanics tests don't pay for a subprocess.
+        base_schemas = MCP_TOOL_SCHEMAS if tool_schemas is None else tool_schemas
+        self.tool_dispatch = tool_dispatch or call_mcp_tool
+        self.tool_schemas = base_schemas + (extra_tool_schemas or [])
         self.extra_tool_dispatch = extra_tool_dispatch or {}
 
     def investigate(self, user_message: str, session: Session) -> dict:
@@ -82,11 +94,21 @@ class Investigator:
                     session.conversation.append({"role": "assistant", "content": args["conclusion"]})
                     return args
 
+                if name == "propose_action":
+                    logger.info("PROPOSED ACTION: %s", args)
+                    session.conversation.append({"role": "assistant", "content": args["confirmation_prompt"]})
+                    return {
+                        "conclusion": args["confirmation_prompt"],
+                        "confidence": args.get("confidence"),
+                        "evidence": args.get("evidence", []),
+                        "pending_action": args,
+                    }
+
                 logger.info("TOOL -> %s(%s)", name, args)
                 if name in self.extra_tool_dispatch:
                     result = self.extra_tool_dispatch[name](**args)
                 else:
-                    result = call_tool(name, args)
+                    result = self.tool_dispatch(name, args)
                 logger.info("TOOL <- %s", result)
                 evidence_log.append({"tool": name, "arguments": args, "result": result})
                 messages.append(

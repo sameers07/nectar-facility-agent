@@ -8,14 +8,14 @@ OPENAI_API_KEY set and inspect the TOOL/REASONING log lines it prints.
 """
 from agent.investigator import Investigator
 from agent.state import Session
-from tests.support import ScriptedClient, llm_response, tool_call
+from tests.support import ScriptedClient, fake_tool_dispatch, llm_response, tool_call
 
 RESET, GREEN, RED = "\033[0m", "\033[32m", "\033[31m"
 
 
 def scenario_basic_query():
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
         llm_response(
             tool_calls=[
                 tool_call(
@@ -26,16 +26,16 @@ def scenario_basic_query():
             ]
         ),
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     result = investigator.investigate("What is the temperature in Building A?", Session())
     return "28.4" in result["conclusion"], result["conclusion"]
 
 
 def scenario_autonomous_investigation():
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
-        llm_response(tool_calls=[tool_call("2", "get_hvac_assets", {"building": "Building A"})]),
-        llm_response(tool_calls=[tool_call("3", "get_asset_status", {"asset": "AHU-02"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
+        llm_response(tool_calls=[tool_call("2", "get_asset_relationships", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("3", "get_asset_status", {"asset_id": "AHU-02"})]),
         llm_response(tool_calls=[tool_call("4", "get_active_alerts", {"building": "Building A"})]),
         llm_response(
             tool_calls=[
@@ -51,14 +51,14 @@ def scenario_autonomous_investigation():
             ]
         ),
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     result = investigator.investigate("The temperature in Building A is too high, what's happening?", Session())
     return result["confidence"] > 0.8 and "AHU-02" in result["conclusion"], result["conclusion"]
 
 
 def scenario_specific_asset():
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_asset_status", {"asset": "AHU-02"})]),
+        llm_response(tool_calls=[tool_call("1", "get_asset_status", {"asset_id": "AHU-02"})]),
         llm_response(
             tool_calls=[
                 tool_call(
@@ -73,14 +73,14 @@ def scenario_specific_asset():
             ]
         ),
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     result = investigator.investigate("Can you check AHU-02?", Session())
     return "AHU-02" in result["conclusion"], result["conclusion"]
 
 
 def scenario_follow_up_context():
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
         llm_response(
             tool_calls=[
                 tool_call(
@@ -101,7 +101,7 @@ def scenario_follow_up_context():
         ),
     ]
     client = ScriptedClient(responses)
-    investigator = Investigator(client=client)
+    investigator = Investigator(client=client, tool_dispatch=fake_tool_dispatch)
     session = Session()
     investigator.investigate("Why is Building A hot?", session)
     investigator.investigate("What about the chiller?", session)
@@ -126,7 +126,7 @@ def scenario_unknown_information():
             ]
         )
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     result = investigator.investigate("Why is Building A experiencing unusual vibration?", Session())
     return result["confidence"] < 0.5 and "sufficient" in result["conclusion"].lower(), result["conclusion"]
 

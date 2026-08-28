@@ -67,6 +67,54 @@ def get_active_alerts(building: str) -> dict:
     return {"building": canonical, "alerts": alerts}
 
 
+def get_asset_details(asset_id: str) -> dict:
+    data = _load()
+    canonical, info = _lookup(data["assets"], asset_id)
+    if info is None:
+        return {"error": f"Unknown asset: {asset_id}"}
+    return {"asset_id": canonical, "type": info["type"], "building": info["building"], "floor": info["floor"]}
+
+
+def get_sensor_data(target: str) -> dict:
+    """Sensor readings for a building (temperature) or an asset (its
+    operating metrics) -- one lookup regardless of which kind of target."""
+    data = _load()
+    canonical, info = _lookup(data["buildings"], target)
+    if info is not None:
+        return {"target": canonical, "readings": {"temperature": info["temperature"]}}
+    canonical, info = _lookup(data["assets"], target)
+    if info is not None:
+        readings = {k: v for k, v in info.items() if k not in ("type", "building", "floor")}
+        return {"target": canonical, "readings": readings}
+    return {"error": f"Unknown target: {target}"}
+
+
+def get_energy_consumption(building: str) -> dict:
+    data = _load()
+    canonical, info = _lookup(data["buildings"], building)
+    if info is None:
+        return {"error": f"Unknown building: {building}"}
+    energy = data.get("energy", {}).get(canonical)
+    if energy is None:
+        return {"error": f"No energy data for {canonical}"}
+    return {"building": canonical, **energy}
+
+
+def get_asset_relationships(building: str) -> dict:
+    data = _load()
+    canonical, info = _lookup(data["buildings"], building)
+    if info is None:
+        return {"error": f"Unknown building: {building}"}
+    assets = info["hvac_assets"]
+    chillers = [a for a in assets if data["assets"][a]["type"] == "chiller"]
+    ahus = [a for a in assets if data["assets"][a]["type"] == "ahu"]
+    return {
+        "building": canonical,
+        "assets": assets,
+        "relationships": [{"chiller": c, "serves": ahus} for c in chillers],
+    }
+
+
 def list_buildings() -> list:
     return list(_load()["buildings"].keys())
 
