@@ -43,3 +43,9 @@ def get_active_alerts(building: str) -> dict:
     data = _load()
     alerts = [a for a in data["alerts"] if a.get("building") == building]
     return {"building": building, "alerts": alerts}
+
+
+def list_known_terms() -> list:
+    """Building and asset names, e.g. to bias speech recognition toward them."""
+    data = _load()
+    return list(data["buildings"].keys()) + list(data["assets"].keys())

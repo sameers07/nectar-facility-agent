@@ -6,8 +6,9 @@ Voice-driven facility investigation agent:
 User voice -> Whisper (local STT) -> Investigator (LLM + tool calling) -> local TTS -> User
 ```
 
-The only external API is the LLM (OpenAI). STT and TTS both run locally, so
-no ElevenLabs/Deepgram key is required.
+The only external API is the LLM (Gemini, via its OpenAI-compatible
+endpoint). STT and TTS both run locally, so no ElevenLabs/Deepgram key is
+required.
 
 ## Architecture
 
@@ -44,6 +45,19 @@ cp .env.example .env  # fill in GEMINI_API_KEY
 uv run app.py            # text mode
 uv run app.py --voice    # microphone in, spoken response out
 ```
+
+Voice mode records until you pause rather than a fixed duration, and biases
+Whisper toward the facility's own vocabulary (building/asset names) so codes
+like "AHU-02" transcribe correctly. If it says "No audio detected", your
+system's default input device may be wrong — override it:
+
+```bash
+AUDIO_INPUT_DEVICE=MacBook uv run app.py --voice   # matches by device name substring
+```
+
+and check System Settings -> Privacy & Security -> Microphone if that
+doesn't help. `WHISPER_MODEL` (default `base`) can be set to `small` for
+better accuracy at the cost of a slower, larger model download.
 
 ## Test
 

@@ -3,6 +3,7 @@ from tools.facility_tools import (
     get_asset_status,
     get_building_temperature,
     get_hvac_assets,
+    list_known_terms,
 )
 
 
@@ -30,3 +31,9 @@ def test_get_active_alerts():
 def test_unknown_building():
     result = get_building_temperature("Building Z")
     assert "error" in result
+
+
+def test_list_known_terms():
+    terms = list_known_terms()
+    assert "Building A" in terms
+    assert "AHU-02" in terms
