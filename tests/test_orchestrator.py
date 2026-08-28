@@ -22,7 +22,7 @@ class RaisingRouter:
         raise self.error
 
 
-def test_knowledge_question_routes_to_rag_placeholder():
+def test_knowledge_question_delegates_to_investigator_with_rag_tool():
     contract = {
         "intent": "knowledge_question",
         "sources": ["rag"],
@@ -30,13 +30,30 @@ def test_knowledge_question_routes_to_rag_placeholder():
         "complexity": "low",
         "confidence": 0.98,
     }
-    orchestrator = Orchestrator(router=FixedRouter(contract))
-    session = Session()
+    responses = [
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "1",
+                    "submit_conclusion",
+                    {"conclusion": "An AHU circulates and conditions air.", "confidence": 0.9, "evidence": []},
+                )
+            ]
+        )
+    ]
+    captured = {}
 
-    result = orchestrator.handle("What is an AHU?", session)
+    def investigator_factory(model, extra_schemas=None, extra_dispatch=None):
+        captured["schemas"] = extra_schemas
+        captured["dispatch"] = extra_dispatch
+        return Investigator(client=ScriptedClient(responses))
 
-    assert "knowledge base" in result["conclusion"]
-    assert session.conversation[0] == {"role": "user", "content": "What is an AHU?"}
+    orchestrator = Orchestrator(router=FixedRouter(contract), investigator_factory=investigator_factory)
+    result = orchestrator.handle("What is an AHU?", Session())
+
+    assert captured["schemas"][0]["function"]["name"] == "retrieve_facility_docs"
+    assert "retrieve_facility_docs" in captured["dispatch"]
+    assert "AHU" in result["conclusion"]
 
 
 def test_live_status_delegates_to_investigator_with_fast_model():
@@ -61,7 +78,7 @@ def test_live_status_delegates_to_investigator_with_fast_model():
     ]
     used_models = []
 
-    def investigator_factory(model):
+    def investigator_factory(model, extra_schemas=None, extra_dispatch=None):
         used_models.append(model)
         return Investigator(client=ScriptedClient(responses))
 
@@ -92,15 +109,19 @@ def test_diagnosis_delegates_to_investigator_with_strong_model():
         )
     ]
     used_models = []
+    captured = {}
 
-    def investigator_factory(model):
+    def investigator_factory(model, extra_schemas=None, extra_dispatch=None):
         used_models.append(model)
+        captured["schemas"] = extra_schemas
         return Investigator(client=ScriptedClient(responses))
 
     orchestrator = Orchestrator(router=FixedRouter(contract), investigator_factory=investigator_factory)
     orchestrator.handle("Why did Chiller-01 fail?", Session())
 
     assert used_models == [STRONG_MODEL]
+    # diagnosis needs both live_data and rag -- the investigator should get the rag tool too
+    assert captured["schemas"][0]["function"]["name"] == "retrieve_facility_docs"
 
 
 def test_action_request_routes_to_action_placeholder():
@@ -158,3 +179,40 @@ def test_unavailable_capability_declines_instead_of_hallucinating():
 
     assert "energy" in result["conclusion"]
     assert "can't access" in result["conclusion"]
+
+
+def test_rag_not_found_does_not_hallucinate():
+    """PDF's explicit Task 3 test: a question the knowledge base doesn't
+    cover must say so, not invent an answer."""
+    contract = {
+        "intent": "knowledge_question",
+        "sources": ["rag"],
+        "action_required": False,
+        "complexity": "low",
+        "confidence": 0.9,
+    }
+    responses = [
+        llm_response(tool_calls=[tool_call("1", "retrieve_facility_docs", {"query": "elevator maintenance"})]),
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "2",
+                    "submit_conclusion",
+                    {
+                        "conclusion": "I don't have documentation covering elevator maintenance.",
+                        "confidence": 0.1,
+                        "evidence": [],
+                    },
+                )
+            ]
+        ),
+    ]
+
+    def investigator_factory(model, extra_schemas=None, extra_dispatch=None):
+        return Investigator(client=ScriptedClient(responses), extra_tool_schemas=extra_schemas, extra_tool_dispatch=extra_dispatch)
+
+    orchestrator = Orchestrator(router=FixedRouter(contract), investigator_factory=investigator_factory)
+    result = orchestrator.handle("How do I service the elevator?", Session())
+
+    assert result["confidence"] < 0.5
+    assert "don't have" in result["conclusion"].lower()

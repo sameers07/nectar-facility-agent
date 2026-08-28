@@ -38,21 +38,23 @@ CONCLUDE_TOOL_SCHEMA = {
 
 
 class Investigator:
-    def __init__(self, client=None, model: str = None):
+    def __init__(self, client=None, model: str = None, extra_tool_schemas: list = None, extra_tool_dispatch: dict = None):
         self.client = client or build_client()
         self.model = model or MODEL
+        self.tool_schemas = TOOL_SCHEMAS + (extra_tool_schemas or [])
+        self.extra_tool_dispatch = extra_tool_dispatch or {}
 
     def investigate(self, user_message: str, session: Session) -> dict:
         logger.info("USER: %s", user_message)
         session.conversation.append({"role": "user", "content": user_message})
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + session.conversation
-        tools = TOOL_SCHEMAS + [CONCLUDE_TOOL_SCHEMA]
+        tools = self.tool_schemas + [CONCLUDE_TOOL_SCHEMA]
         evidence_log = []
 
         for _ in range(MAX_TOOL_ITERATIONS):
             try:
                 response = self.client.chat.completions.create(
-                    model=self.model, messages=messages, tools=tools, tool_choice="auto"
+                    model=self.model, messages=messages, tools=tools, tool_choice="required"
                 )
             except Exception:
                 logger.exception("LLM call failed during investigation")
@@ -81,7 +83,10 @@ class Investigator:
                     return args
 
                 logger.info("TOOL -> %s(%s)", name, args)
-                result = call_tool(name, args)
+                if name in self.extra_tool_dispatch:
+                    result = self.extra_tool_dispatch[name](**args)
+                else:
+                    result = call_tool(name, args)
                 logger.info("TOOL <- %s", result)
                 evidence_log.append({"tool": name, "arguments": args, "result": result})
                 messages.append(

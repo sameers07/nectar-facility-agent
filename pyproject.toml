@@ -9,6 +9,7 @@ dependencies = [
     "openai-whisper>=20231117",
     "sounddevice>=0.4.6",
     "pyttsx3>=2.90",
+    "sentence-transformers>=6.0.0",
 ]
 
 [dependency-groups]

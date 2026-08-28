@@ -43,7 +43,10 @@ def test_step_updates_session_across_turns(monkeypatch, capsys):
         "complexity": "low",
         "confidence": 0.95,
     }
-    orchestrator = Orchestrator(router=FixedRouter(contract), investigator_factory=lambda model: investigator)
+    orchestrator = Orchestrator(
+        router=FixedRouter(contract),
+        investigator_factory=lambda model, extra_schemas=None, extra_dispatch=None: investigator,
+    )
     agent = VoiceAgent(voice=False, orchestrator=orchestrator)
 
     monkeypatch.setattr("builtins.input", lambda prompt="": "What is the temperature in Building A?")
