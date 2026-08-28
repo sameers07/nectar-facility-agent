@@ -67,6 +67,43 @@ rather than picking one fixed agent:
   thin CLI wrapper around it. `step()` has a final catch-all so an
   unexpected error degrades to a message instead of crashing the loop.
 
+### Task 3 — RAG facility knowledge
+
+Deliberately **not** a separate "RAG agent" pipeline bolted alongside the
+investigator. Retrieval is exposed as one more tool
+(`retrieve_facility_docs`) in the *same* tool-calling loop Task 1 already
+has — when the router's contract includes `"rag"`, `Orchestrator` passes
+that tool to the `Investigator`, so the model can interleave live-data
+calls and documentation lookups within one continuous reasoning chain
+(e.g. check an alert, then look up what that alert code means, then
+conclude) instead of stitching together two disconnected subsystems'
+outputs. Source references and "don't invent an answer" both come for
+free this way — they're just the existing `evidence` list and system
+prompt instruction, not new machinery.
+
+- `knowledge/*.md` — the sample knowledge base (HVAC procedures, chiller
+  manual, AHU troubleshooting, maintenance procedures, safety
+  instructions, equipment specs, facility policies, troubleshooting FAQs),
+  written to reference the same mock entities as `data/facility.json`
+  (Building A, Chiller-01, AHU-02's `LOW_AIRFLOW` alert, etc.) so
+  retrieval and live data actually connect in an investigation.
+- `rag/loader.py` — chunks each doc by its own `## ` sections rather than
+  an arbitrary character window, since the docs are already organized
+  into self-contained topics.
+- `rag/store.py` — `VectorStore`: embeds chunks locally
+  (`sentence-transformers`, no API calls) and retrieves by exact cosine
+  similarity in numpy, filtered by a similarity-score threshold (the
+  reranking/filtering step). A full ANN index (FAISS/Chroma) is
+  unnecessary for a few dozen chunks — deliberate right-sizing, not a
+  shortcut.
+- `tools/rag_tool.py` — `retrieve_facility_docs` + its schema, kept
+  separate from `tools/registry.py`'s always-on facility tools since it's
+  conditionally attached per routing decision, not part of the default
+  toolset.
+- `agent/investigator.py` gained `extra_tool_schemas`/`extra_tool_dispatch`
+  constructor params (defaulting to none) so `Orchestrator` can attach the
+  RAG tool for a given request without changing Task 1's default behavior.
+
 ## Setup
 
 ```bash
