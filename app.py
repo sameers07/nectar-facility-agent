@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from agent.investigator import Investigator
 from agent.state import Session
 
+sys.stdout.reconfigure(line_buffering=True)
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 

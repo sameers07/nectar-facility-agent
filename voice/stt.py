@@ -42,21 +42,26 @@ def _resolve_input_device(sd):
 
 def record_and_transcribe(duration: float = 5.0, sample_rate: int = 16000) -> str:
     """Record `duration` seconds from the microphone and transcribe it."""
+    print("Loading audio backend...", flush=True)
     import numpy as np
     import sounddevice as sd
 
+    print("Selecting input device...", flush=True)
     device = _resolve_input_device(sd)
     device_name = sd.query_devices(device)["name"] if device is not None else sd.query_devices(sd.default.device[0])["name"]
-    print(f"Listening for {duration:.0f}s (device: {device_name})...")
+    print(f"Listening for {duration:.0f}s (device: {device_name})...", flush=True)
     audio = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="float32", device=device)
     sd.wait()
+    print("Recording finished, transcribing...", flush=True)
     audio = audio.flatten()
 
     if np.abs(audio).max() < SILENCE_THRESHOLD:
         print(
             f"No audio detected from '{device_name}'. If this isn't your mic, set "
-            "AUDIO_INPUT_DEVICE (e.g. AUDIO_INPUT_DEVICE=MacBook) or check macOS "
-            "microphone permissions for this terminal."
+            "AUDIO_INPUT_DEVICE (e.g. AUDIO_INPUT_DEVICE=MacBook). If it is your mic, check "
+            "System Settings -> Privacy & Security -> Microphone and make sure your terminal "
+            "app is allowed access.",
+            flush=True,
         )
         return ""
 
