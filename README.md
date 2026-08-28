@@ -34,21 +34,19 @@ no ElevenLabs/Deepgram key is required.
 ## Setup
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 cp .env.example .env  # fill in OPENAI_API_KEY
 ```
 
 ## Run
 
 ```bash
-python app.py            # text mode
-python app.py --voice    # microphone in, spoken response out
+uv run app.py            # text mode
+uv run app.py --voice    # microphone in, spoken response out
 ```
 
 ## Test
 
 ```bash
-pytest
+uv run pytest
 ```
