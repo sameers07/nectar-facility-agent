@@ -28,6 +28,9 @@ required.
   investigation.
 - `agent/prompts.py` — the system prompt that makes the LLM investigate
   rather than answer immediately.
+- `agent/voice_agent.py` — `VoiceAgent` ties the investigator, session, and
+  I/O (text or voice) together into one runnable loop; `app.py` is a thin
+  CLI wrapper around it.
 - `voice/stt.py` — local Whisper transcription (from a file or the
   microphone).
 - `voice/tts.py` — local text-to-speech via `pyttsx3`.
