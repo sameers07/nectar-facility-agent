@@ -1,0 +1,52 @@
+{
+  "buildings": {
+    "Building A": {
+      "temperature": 28.4,
+      "hvac_assets": ["Chiller-01", "AHU-01", "AHU-02"]
+    },
+    "Building B": {
+      "temperature": 22.1,
+      "hvac_assets": ["Chiller-02", "AHU-03"]
+    }
+  },
+  "assets": {
+    "Chiller-01": {
+      "type": "chiller",
+      "building": "Building A",
+      "status": "running",
+      "power_deviation": 18
+    },
+    "AHU-01": {
+      "type": "ahu",
+      "building": "Building A",
+      "status": "normal",
+      "airflow": 72
+    },
+    "AHU-02": {
+      "type": "ahu",
+      "building": "Building A",
+      "status": "warning",
+      "airflow": 41
+    },
+    "Chiller-02": {
+      "type": "chiller",
+      "building": "Building B",
+      "status": "running",
+      "power_deviation": 3
+    },
+    "AHU-03": {
+      "type": "ahu",
+      "building": "Building B",
+      "status": "normal",
+      "airflow": 68
+    }
+  },
+  "alerts": [
+    {
+      "asset": "AHU-02",
+      "building": "Building A",
+      "type": "LOW_AIRFLOW",
+      "severity": "high"
+    }
+  ]
+}
