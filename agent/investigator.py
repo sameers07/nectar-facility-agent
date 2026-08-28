@@ -54,7 +54,7 @@ class Investigator:
         for _ in range(MAX_TOOL_ITERATIONS):
             try:
                 response = self.client.chat.completions.create(
-                    model=self.model, messages=messages, tools=tools, tool_choice="auto"
+                    model=self.model, messages=messages, tools=tools, tool_choice="required"
                 )
             except Exception:
                 logger.exception("LLM call failed during investigation")
