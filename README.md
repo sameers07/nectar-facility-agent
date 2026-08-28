@@ -35,7 +35,7 @@ no ElevenLabs/Deepgram key is required.
 
 ```bash
 uv sync
-cp .env.example .env  # fill in OPENAI_API_KEY
+cp .env.example .env  # fill in GEMINI_API_KEY
 ```
 
 ## Run
@@ -60,6 +60,6 @@ pass/fail table. This proves the loop's mechanics — tool dispatch, evidence
 handling, session memory — deterministically, without needing an API key.
 
 It does not by itself prove the model autonomously *chooses* its own tool
-sequence; that requires a real LLM. To see that, set `OPENAI_API_KEY` and run
+sequence; that requires a real LLM. To see that, set `GEMINI_API_KEY` and run
 `uv run app.py` — it logs every `TOOL ->` / `TOOL <-` / `REASONING` step so
 you can watch the investigation unfold live.

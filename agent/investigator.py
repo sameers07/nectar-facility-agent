@@ -6,7 +6,7 @@ from agent.prompts import SYSTEM_PROMPT
 from agent.state import Session
 from tools.registry import TOOL_SCHEMAS, call_tool
 
-MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+MODEL = os.environ.get("GEMINI_MODEL", os.environ.get("OPENAI_MODEL", "gemini-2.5-flash"))
 MAX_TOOL_ITERATIONS = 8
 
 logger = logging.getLogger("investigator")
@@ -41,7 +41,11 @@ class Investigator:
         if client is None:
             from openai import OpenAI
 
-            client = OpenAI()
+            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            base_url = os.environ.get(
+                "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
+            )
+            client = OpenAI(api_key=api_key, base_url=base_url)
         self.client = client
 
     def investigate(self, user_message: str, session: Session) -> dict:

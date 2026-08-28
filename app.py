@@ -8,9 +8,12 @@ import logging
 import os
 import sys
 
+from dotenv import load_dotenv
+
 from agent.investigator import Investigator
 from agent.state import Session
 
+load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
@@ -18,9 +21,10 @@ def get_user_message(voice: bool) -> str:
     if voice:
         from voice.stt import record_and_transcribe
 
-        text = record_and_transcribe()
-        print(f"You: {text}")
-        return text.strip()
+        text = record_and_transcribe().strip()
+        if text:
+            print(f"You: {text}")
+        return text
     return input("\nYou: ").strip()
 
 
@@ -43,8 +47,8 @@ def main():
     parser.add_argument("--voice", action="store_true", help="Use microphone input and spoken output.")
     args = parser.parse_args()
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY is not set. Copy .env.example to .env and fill it in.")
+    if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        print("GEMINI_API_KEY is not set. Copy .env.example to .env and fill it in.")
         sys.exit(1)
 
     investigator = Investigator()
