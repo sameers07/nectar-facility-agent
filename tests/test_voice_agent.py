@@ -1,7 +1,7 @@
 from agent.investigator import Investigator
 from agent.orchestrator import Orchestrator
 from agent.voice_agent import VoiceAgent
-from tests.support import ScriptedClient, llm_response, tool_call
+from tests.support import ScriptedClient, fake_tool_dispatch, llm_response, tool_call
 
 
 class FixedRouter:
@@ -24,7 +24,7 @@ def _never_called_router():
 
 def test_step_updates_session_across_turns(monkeypatch, capsys):
     responses = [
-        llm_response(tool_calls=[tool_call("1", "get_building_temperature", {"building": "Building A"})]),
+        llm_response(tool_calls=[tool_call("1", "get_sensor_data", {"target": "Building A"})]),
         llm_response(
             tool_calls=[
                 tool_call(
@@ -35,7 +35,7 @@ def test_step_updates_session_across_turns(monkeypatch, capsys):
             ]
         ),
     ]
-    investigator = Investigator(client=ScriptedClient(responses))
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
     contract = {
         "intent": "live_status",
         "sources": ["live_data"],

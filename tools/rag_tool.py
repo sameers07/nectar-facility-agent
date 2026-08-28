@@ -19,7 +19,11 @@ RAG_TOOL_SCHEMA = {
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "What to search for, e.g. 'AHU low airflow troubleshooting'.",
+                    "description": (
+                        "A full natural-language question or sentence, not a bare keyword or "
+                        "acronym -- e.g. 'What should I check if AHU airflow is low?', not "
+                        "'AHU airflow'. Short keyword-only queries retrieve much worse."
+                    ),
                 }
             },
             "required": ["query"],

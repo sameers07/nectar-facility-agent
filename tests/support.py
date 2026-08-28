@@ -28,6 +28,14 @@ class ScriptedClient:
         return next(self._responses)
 
 
+def fake_tool_dispatch(name, arguments):
+    """Generic stand-in for real MCP tool dispatch. Tests using
+    ScriptedClient script the LLM's final answer directly, so the actual
+    tool result is never inspected -- this just needs to return something
+    without spawning a real MCP subprocess."""
+    return {"tool": name, "arguments": arguments, "mock": True}
+
+
 class RaisingClient:
     """Fake OpenAI client that simulates a failed API call (network error,
     rate limit, etc.) for testing failure-handling paths."""

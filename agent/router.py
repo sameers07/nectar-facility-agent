@@ -24,15 +24,17 @@ INTENTS = [
     "unknown",
 ]
 
-# What this system can actually back today. "rag" and "action" have
-# placeholder handlers (Tasks 3/4 build the real thing); "energy" is
-# deliberately False to prove unavailable capabilities are handled instead
-# of hallucinated.
+# What this system can actually back today. "video_surveillance" is
+# deliberately False -- kept as a live example that an unimplemented
+# capability gets declined instead of hallucinated, now that rag/live_data/
+# action/energy are all real (Task 4 wired action+energy up to the MCP
+# server).
 CAPABILITIES = {
     "rag": True,
     "live_data": True,
     "action": True,
-    "energy": False,
+    "energy": True,
+    "video_surveillance": False,
 }
 
 CONFIDENCE_THRESHOLD = 0.6
@@ -88,6 +90,8 @@ Capabilities:
 - live_data: live building/HVAC data (temperature, asset status, alerts).
 - action: taking an action in the facility (e.g. creating a maintenance request).
 - energy: live energy consumption data.
+- video_surveillance: camera feeds/footage. Not available -- still classify
+  requests needing it with this source so the system can decline properly.
 
 Intents:
 - knowledge_question: asking what something is or how it works (-> rag).

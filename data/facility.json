@@ -13,30 +13,35 @@
     "Chiller-01": {
       "type": "chiller",
       "building": "Building A",
+      "floor": 0,
       "status": "running",
       "power_deviation": 18
     },
     "AHU-01": {
       "type": "ahu",
       "building": "Building A",
+      "floor": 1,
       "status": "normal",
       "airflow": 72
     },
     "AHU-02": {
       "type": "ahu",
       "building": "Building A",
+      "floor": 2,
       "status": "warning",
       "airflow": 41
     },
     "Chiller-02": {
       "type": "chiller",
       "building": "Building B",
+      "floor": 0,
       "status": "running",
       "power_deviation": 3
     },
     "AHU-03": {
       "type": "ahu",
       "building": "Building B",
+      "floor": 1,
       "status": "normal",
       "airflow": 68
     }
@@ -48,5 +53,9 @@
       "type": "LOW_AIRFLOW",
       "severity": "high"
     }
-  ]
+  ],
+  "energy": {
+    "Building A": {"consumption_kwh": 842, "period": "today"},
+    "Building B": {"consumption_kwh": 511, "period": "today"}
+  }
 }

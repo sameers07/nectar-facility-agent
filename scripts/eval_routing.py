@@ -37,8 +37,12 @@ SCENARIOS = [
     ("Ambiguous", "Something is wrong.", lambda c: c["confidence"] < 0.6),
     ("Ambiguous", "Can you check it?", lambda c: c["confidence"] < 0.6),
     ("Ambiguous", "What's happening?", lambda c: c["confidence"] < 0.6),
-    # F. Unavailable capability
-    ("Unavailable", "What's the current energy consumption?", lambda c: "energy" in c["sources"]),
+    # F. Unavailable capability (still correctly routed -- Orchestrator declines it downstream)
+    (
+        "Unavailable",
+        "Can you show me the camera feed for the loading dock?",
+        lambda c: "video_surveillance" in c["sources"],
+    ),
 ]
 
 
