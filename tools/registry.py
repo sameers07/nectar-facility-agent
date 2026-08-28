@@ -77,4 +77,14 @@ def call_tool(name: str, arguments: dict) -> dict:
     fn = TOOL_DISPATCH.get(name)
     if fn is None:
         return {"error": f"Unknown tool: {name}"}
-    return fn(**arguments)
+    try:
+        return fn(**arguments)
+    except TypeError as e:
+        # e.g. the model passed a wrong/missing argument name -- surface it
+        # as a tool error the LLM can react to, not a crash.
+        return {"error": f"Invalid arguments for {name}: {e}"}
+    except Exception as e:
+        # Unexpected failure (e.g. facility.json unreadable) -- same
+        # principle: tell the LLM the tool failed rather than crashing the
+        # whole investigation loop over one bad call.
+        return {"error": f"{name} failed unexpectedly: {e}"}

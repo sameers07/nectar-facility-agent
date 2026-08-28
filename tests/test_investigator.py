@@ -1,6 +1,6 @@
 from agent.investigator import Investigator
 from agent.state import Session
-from tests.support import ScriptedClient, llm_response, tool_call
+from tests.support import RaisingClient, ScriptedClient, llm_response, tool_call
 
 
 def test_basic_single_tool_query():
@@ -163,3 +163,13 @@ def test_iteration_limit_returns_fallback():
 
     assert result["confidence"] == 0.0
     assert "did not reach a conclusion" in result["conclusion"]
+
+
+def test_llm_failure_degrades_gracefully_instead_of_crashing():
+    investigator = Investigator(client=RaisingClient())
+    session = Session()
+
+    result = investigator.investigate("What is the temperature in Building A?", session)
+
+    assert result["confidence"] == 0.0
+    assert "technical error" in result["conclusion"]

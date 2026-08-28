@@ -26,3 +26,15 @@ class ScriptedClient:
     def _create(self, **kwargs):
         self.calls.append(kwargs)
         return next(self._responses)
+
+
+class RaisingClient:
+    """Fake OpenAI client that simulates a failed API call (network error,
+    rate limit, etc.) for testing failure-handling paths."""
+
+    def __init__(self, error: Exception = None):
+        self.error = error or RuntimeError("simulated API failure")
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def _create(self, **kwargs):
+        raise self.error

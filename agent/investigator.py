@@ -2,6 +2,7 @@ import json
 import logging
 import os
 
+from agent.llm_client import build_client
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import Session
 from tools.registry import TOOL_SCHEMAS, call_tool
@@ -37,16 +38,9 @@ CONCLUDE_TOOL_SCHEMA = {
 
 
 class Investigator:
-    def __init__(self, client=None):
-        if client is None:
-            from openai import OpenAI
-
-            api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY")
-            base_url = os.environ.get(
-                "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
-            )
-            client = OpenAI(api_key=api_key, base_url=base_url)
-        self.client = client
+    def __init__(self, client=None, model: str = None):
+        self.client = client or build_client()
+        self.model = model or MODEL
 
     def investigate(self, user_message: str, session: Session) -> dict:
         logger.info("USER: %s", user_message)
@@ -56,9 +50,17 @@ class Investigator:
         evidence_log = []
 
         for _ in range(MAX_TOOL_ITERATIONS):
-            response = self.client.chat.completions.create(
-                model=MODEL, messages=messages, tools=tools, tool_choice="auto"
-            )
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model, messages=messages, tools=tools, tool_choice="auto"
+                )
+            except Exception:
+                logger.exception("LLM call failed during investigation")
+                return {
+                    "conclusion": "I ran into a technical error while investigating. Please try again.",
+                    "confidence": 0.0,
+                    "evidence": [e["result"] for e in evidence_log],
+                }
             message = response.choices[0].message
             messages.append(message)
 
