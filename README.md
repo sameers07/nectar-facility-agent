@@ -6,6 +6,9 @@ building/HVAC data, and creates maintenance requests — autonomously
 deciding what it needs at each step, never guessing when it doesn't know,
 and never taking a write action without your explicit confirmation.
 
+See also: [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) (concise summary),
+[docs/mcp_api.md](docs/mcp_api.md) (MCP tool reference), [evaluation/](evaluation/) (results + raw traces).
+
 ## 1. Problem
 
 A facility manager shouldn't have to know which system holds which piece
@@ -251,6 +254,7 @@ mcp_client/client.py     Synchronous wrapper around the SDK's async client --
 deliberately not mocked — that's exactly the boundary that needs to be a
 genuine protocol, not a decorative wrapper, to actually satisfy the
 requirement. Full tool-by-tool results: [evaluation/mcp_results.md](evaluation/mcp_results.md).
+API reference for all 8 tools: [docs/mcp_api.md](docs/mcp_api.md).
 
 ## 8. Safety & Confirmation
 
