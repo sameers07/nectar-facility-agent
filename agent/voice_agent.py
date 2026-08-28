@@ -1,14 +1,14 @@
-from agent.investigator import Investigator
+from agent.orchestrator import Orchestrator
 from agent.state import Session
 
 
 class VoiceAgent:
-    """Ties the investigator, session memory, and I/O (text or voice)
-    together into one runnable loop."""
+    """Ties the request router/orchestrator, session memory, and I/O (text
+    or voice) together into one runnable loop."""
 
-    def __init__(self, voice: bool = False, investigator: Investigator = None):
+    def __init__(self, voice: bool = False, orchestrator: Orchestrator = None):
         self.voice = voice
-        self.investigator = investigator or Investigator()
+        self.orchestrator = orchestrator or Orchestrator()
         self.session = Session()
 
     def get_user_message(self) -> str:
@@ -43,7 +43,7 @@ class VoiceAgent:
         if not user_message:
             return True
 
-        result = self.investigator.investigate(user_message, self.session)
+        result = self.orchestrator.handle(user_message, self.session)
         self.respond(result)
         return True
 
