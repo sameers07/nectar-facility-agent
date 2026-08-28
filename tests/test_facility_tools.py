@@ -33,6 +33,19 @@ def test_unknown_building():
     assert "error" in result
 
 
+def test_asset_lookup_tolerates_formatting_variants():
+    for variant in ["AHU02", "ahu-02", "ahu 02", "AHU_02"]:
+        result = get_asset_status(variant)
+        assert result["asset"] == "AHU-02", f"{variant!r} should resolve to AHU-02"
+        assert result["status"] == "warning"
+
+
+def test_building_lookup_tolerates_case():
+    result = get_building_temperature("building a")
+    assert result["building"] == "Building A"
+    assert result["temperature"] == 28.4
+
+
 def test_list_known_terms():
     terms = list_known_terms()
     assert "Building A" in terms

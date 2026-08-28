@@ -3,6 +3,17 @@ tools, and dispatches by name when the LLM requests one.
 """
 from tools import facility_tools
 
+
+def _building_param(description: str) -> dict:
+    known = ", ".join(facility_tools.list_buildings())
+    return {"building": {"type": "string", "description": f"{description} One of: {known}."}}
+
+
+def _asset_param(description: str) -> dict:
+    known = ", ".join(facility_tools.list_assets())
+    return {"asset": {"type": "string", "description": f"{description} One of: {known}."}}
+
+
 TOOL_SCHEMAS = [
     {
         "type": "function",
@@ -11,9 +22,7 @@ TOOL_SCHEMAS = [
             "description": "Get the current temperature of a building.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "building": {"type": "string", "description": "Building name, e.g. 'Building A'"}
-                },
+                "properties": _building_param("Building name."),
                 "required": ["building"],
             },
         },
@@ -25,9 +34,7 @@ TOOL_SCHEMAS = [
             "description": "List the HVAC assets (chillers, AHUs) installed in a building.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "building": {"type": "string", "description": "Building name, e.g. 'Building A'"}
-                },
+                "properties": _building_param("Building name."),
                 "required": ["building"],
             },
         },
@@ -39,9 +46,7 @@ TOOL_SCHEMAS = [
             "description": "Get the status and operating metrics of a specific HVAC asset.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "asset": {"type": "string", "description": "Asset name, e.g. 'AHU-02'"}
-                },
+                "properties": _asset_param("Asset name."),
                 "required": ["asset"],
             },
         },
@@ -53,9 +58,7 @@ TOOL_SCHEMAS = [
             "description": "Get active alerts for a building.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "building": {"type": "string", "description": "Building name, e.g. 'Building A'"}
-                },
+                "properties": _building_param("Building name."),
                 "required": ["building"],
             },
         },
