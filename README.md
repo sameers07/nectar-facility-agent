@@ -317,6 +317,27 @@ traceback:
 A genuine transient Gemini 503 was hit live during acceptance testing and
 handled exactly as designed — see [evaluation/e2e_results.md](evaluation/e2e_results.md).
 
+### Observability
+
+`agent/observability.py` correlates every log line for one user turn with
+a `request_id`, using a `contextvars`-based logging filter rather than
+threading a parameter through every function signature — `VoiceAgent.step()`
+opens `new_request()` once per turn, and every `logger.info()` call
+anywhere in that turn's call stack (router, investigator, tools) picks up
+the same ID automatically. Also tracked per turn: STT latency, per-LLM-call
+latency and token usage (router and each investigation call separately),
+model used, per-tool-call latency, tool call count, and errors —
+aggregated into one `SUMMARY:` log line at the end of the turn:
+
+```
+[0ce6a76e] ROUTE: {...} (latency_ms=1777, tokens=737)
+[0ce6a76e] TOOL -> get_asset_status({'asset_id': 'Chiller-01'})
+[0ce6a76e] TOOL <- {...} (374ms)
+[0ce6a76e] REASONING: ... (confidence 1.00)
+[0ce6a76e] SUMMARY: request_id=0ce6a76e model=gemini-2.5-flash stt_ms=- route_ms=1777
+           llm_calls=2 llm_ms_total=5965 tool_calls=1 tool_ms_total=374 tts_ms=- errors=0
+```
+
 ## 11. Setup
 
 ```bash

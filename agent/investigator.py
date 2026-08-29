@@ -1,8 +1,10 @@
 import json
 import logging
 import os
+import time
 
 from agent.llm_client import build_client
+from agent.observability import current_metrics
 from agent.prompts import SYSTEM_PROMPT
 from agent.state import Session
 from tools.mcp_tools import MCP_TOOL_SCHEMAS, call_mcp_tool
@@ -62,19 +64,31 @@ class Investigator:
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + session.conversation
         tools = self.tool_schemas + [CONCLUDE_TOOL_SCHEMA]
         evidence_log = []
+        metrics = current_metrics()
+        if metrics is not None:
+            metrics.model = self.model
 
         for _ in range(MAX_TOOL_ITERATIONS):
+            start = time.perf_counter()
             try:
                 response = self.client.chat.completions.create(
                     model=self.model, messages=messages, tools=tools, tool_choice="required"
                 )
-            except Exception:
+            except Exception as exc:
                 logger.exception("LLM call failed during investigation")
+                if metrics is not None:
+                    metrics.record_error("investigator", str(exc))
                 return {
                     "conclusion": "I ran into a technical error while investigating. Please try again.",
                     "confidence": 0.0,
                     "evidence": [e["result"] for e in evidence_log],
                 }
+            llm_ms = (time.perf_counter() - start) * 1000
+            if metrics is not None:
+                usage = getattr(response, "usage", None)
+                metrics.record_llm_call(
+                    "investigator", self.model, llm_ms, getattr(usage, "total_tokens", None)
+                )
             message = response.choices[0].message
             messages.append(message)
 
@@ -105,11 +119,17 @@ class Investigator:
                     }
 
                 logger.info("TOOL -> %s(%s)", name, args)
+                tool_start = time.perf_counter()
                 if name in self.extra_tool_dispatch:
                     result = self.extra_tool_dispatch[name](**args)
                 else:
                     result = self.tool_dispatch(name, args)
-                logger.info("TOOL <- %s", result)
+                tool_ms = (time.perf_counter() - tool_start) * 1000
+                if metrics is not None:
+                    metrics.record_tool_call(name, tool_ms)
+                if isinstance(result, dict) and "error" in result and metrics is not None:
+                    metrics.record_error(f"tool:{name}", str(result["error"]))
+                logger.info("TOOL <- %s (%.0fms)", result, tool_ms)
                 evidence_log.append({"tool": name, "arguments": args, "result": result})
                 messages.append(
                     {

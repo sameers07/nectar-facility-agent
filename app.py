@@ -10,11 +10,13 @@ import sys
 
 from dotenv import load_dotenv
 
+from agent.observability import RequestIdFilter
 from agent.voice_agent import VoiceAgent
 
 sys.stdout.reconfigure(line_buffering=True)
 load_dotenv()
-logging.basicConfig(level=logging.WARNING, format="%(message)s")
+logging.basicConfig(level=logging.WARNING, format="[%(request_id)s] %(message)s")
+logging.getLogger().handlers[0].addFilter(RequestIdFilter())
 for _name in ("investigator", "router", "orchestrator", "voice_agent"):
     logging.getLogger(_name).setLevel(logging.INFO)
 
