@@ -5,6 +5,7 @@ import time
 
 from agent.errors import LLMProviderError, RoutingError
 from agent.llm_client import build_client
+from agent.observability import current_metrics
 from agent.state import Session
 
 logger = logging.getLogger("router")
@@ -141,9 +142,16 @@ class Router:
             )
         except Exception as e:
             logger.exception("Router LLM call failed")
+            metrics = current_metrics()
+            if metrics is not None:
+                metrics.record_error("router", str(e))
             raise LLMProviderError(str(e)) from e
         self.last_latency_ms = (time.perf_counter() - start) * 1000
         self.last_usage = getattr(response, "usage", None)
+        metrics = current_metrics()
+        if metrics is not None:
+            metrics.route_ms = self.last_latency_ms
+            metrics.route_tokens = getattr(self.last_usage, "total_tokens", None)
 
         try:
             tool_call = response.choices[0].message.tool_calls[0]
@@ -153,6 +161,8 @@ class Router:
                 raise ValueError(f"missing fields: {missing}")
         except (IndexError, AttributeError, TypeError, ValueError) as e:
             logger.exception("Router returned an invalid contract")
+            if metrics is not None:
+                metrics.record_error("router", str(e))
             raise RoutingError(str(e)) from e
 
         logger.info(

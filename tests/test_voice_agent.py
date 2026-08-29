@@ -93,3 +93,39 @@ def test_step_survives_an_unexpected_orchestrator_error(monkeypatch, capsys):
 
     assert keep_going is True
     assert "went wrong" in capsys.readouterr().out
+
+
+def test_step_logs_a_correlated_summary_line(monkeypatch, caplog):
+    contract = {
+        "intent": "live_status",
+        "sources": ["live_data"],
+        "action_required": False,
+        "complexity": "low",
+        "confidence": 0.95,
+    }
+    responses = [
+        llm_response(
+            tool_calls=[
+                tool_call(
+                    "1",
+                    "submit_conclusion",
+                    {"conclusion": "Building A is at 28.4C.", "confidence": 0.9, "evidence": []},
+                )
+            ]
+        )
+    ]
+    investigator = Investigator(client=ScriptedClient(responses), tool_dispatch=fake_tool_dispatch)
+    orchestrator = Orchestrator(
+        router=FixedRouter(contract),
+        investigator_factory=lambda model, extra_schemas=None, extra_dispatch=None: investigator,
+    )
+    agent = VoiceAgent(voice=False, orchestrator=orchestrator)
+
+    monkeypatch.setattr("builtins.input", lambda prompt="": "What is the temperature in Building A?")
+    with caplog.at_level("INFO", logger="voice_agent"):
+        agent.step()
+
+    summary_lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("SUMMARY:")]
+    assert len(summary_lines) == 1
+    assert "request_id=" in summary_lines[0]
+    assert "model=" in summary_lines[0]

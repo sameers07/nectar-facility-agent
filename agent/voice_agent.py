@@ -1,5 +1,6 @@
 import logging
 
+from agent.observability import current_metrics, new_request, timed
 from agent.orchestrator import Orchestrator
 from agent.state import Session
 
@@ -19,7 +20,12 @@ class VoiceAgent:
         if self.voice:
             from voice.stt import record_and_transcribe
 
-            text = record_and_transcribe().strip()
+            with timed() as t:
+                text = record_and_transcribe()
+            text = text.strip()
+            metrics = current_metrics()
+            if metrics is not None:
+                metrics.stt_ms = t.ms
             if text:
                 print(f"You: {text}")
             return text
@@ -36,24 +42,31 @@ class VoiceAgent:
         if self.voice:
             from voice.tts import speak
 
-            speak(result["conclusion"])
+            with timed() as t:
+                speak(result["conclusion"])
+            metrics = current_metrics()
+            if metrics is not None:
+                metrics.tts_ms = t.ms
 
     def step(self) -> bool:
         """Process one conversational turn. Returns False when the user quits."""
-        try:
-            user_message = self.get_user_message()
-        except (KeyboardInterrupt, EOFError):
-            return False
-        if not user_message:
-            return True
+        with new_request() as metrics:
+            try:
+                user_message = self.get_user_message()
+            except (KeyboardInterrupt, EOFError):
+                return False
+            if not user_message:
+                return True
 
-        try:
-            result = self.orchestrator.handle(user_message, self.session)
-        except Exception:
-            logger.exception("Unhandled error processing request")
-            result = {"conclusion": "Something went wrong on my end. Could you try that again?", "confidence": None}
-        self.respond(result)
-        return True
+            try:
+                result = self.orchestrator.handle(user_message, self.session)
+            except Exception:
+                logger.exception("Unhandled error processing request")
+                metrics.record_error("voice_agent", "unhandled exception")
+                result = {"conclusion": "Something went wrong on my end. Could you try that again?", "confidence": None}
+            self.respond(result)
+            logger.info("SUMMARY: %s", metrics.summary())
+            return True
 
     def run(self) -> None:
         print("Facility investigator ready. Ask about a building or HVAC asset (Ctrl+C to quit).")
